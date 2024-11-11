@@ -6,11 +6,12 @@ CFLAGS = -Wall -g
 
 PROGS = chip8
 OBJS = $(addsuffix .o, $(FILES))
+LDLIBS = -lSDL2
 
 all: $(PROGS)
 
 $(PROGS): % : src/%.o
-	"$(CC)" $(CFLAGS) -o $@ $<
+	"$(CC)" $(CFLAGS) -o $@ $< $(LDLIBS)
 
 $(OBJS): % : src/%.c
 	"$(CC)" $(CFLAGS) -c -o $@ src/$@.c

@@ -3,6 +3,11 @@
 
 #include<stdint.h>
 
+/* SDL2 Constants */
+const int SCREEN_WIDTH = 640;
+const int SCREEN_HEIGHT = 480;
+
+/* CHIP-8 Specifics */
 #define MEMSIZE 4096
 
 uint16_t opcode;

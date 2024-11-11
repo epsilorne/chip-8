@@ -4,11 +4,12 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <SDL2/SDL.h>
+
 #include "chip8.h"
 
 /**
   * Initialise memory and registers to their starting values.
-  *
   */
 void init_chip8(void){
   opcode = 0;
@@ -31,8 +32,7 @@ void init_chip8(void){
 }
 
 /**
- * Open a ROM and place it into the CHIP-8 memory. Takes
- * the file path of the ROM.
+ * Open a ROM and place it into the CHIP-8 memory. Takes the file path of the ROM.
  */
 void open_rom(char* rom){
   FILE *fptr;
@@ -52,8 +52,8 @@ void open_rom(char* rom){
 }
 
 /**
-  * Simulate a single cycle. This involves fetching the current
-  * instruction, decoding it and execution.
+  * Simulate a single cycle. This involves fetching the current instruction,
+  * decoding it and execution.
   */
 void cycle(void){
   // FETCH (and increment program counter)
@@ -303,7 +303,7 @@ void cycle(void){
 /**
   * Displays the current state of the registers, stack, PC, etc.
   */
-void print_info(){
+void print_info(void){
   printf("\r");
   for(int i = 0; i < 16; i++){
     printf("V%x: %u ", i, v[i]);
@@ -312,22 +312,59 @@ void print_info(){
   fflush(stdout);
 }
 
+/**
+  * Initialises SDL display. Takes a char* pointer for the window title (e.g.
+  * name of the ROM loaded) and a SDL_Window.
+  */
+void init_SDL(char* title, SDL_Window *window){
+  if(SDL_Init(SDL_INIT_VIDEO) != 0){
+    fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
+    exit(1);
+  }
+
+  if((window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+  SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN)) == NULL){
+    fprintf(stderr,  "SDL_CreateWindow: %s\n", SDL_GetError());
+    SDL_Quit();
+    exit(1);
+  }
+}
+
 int main(int argc, char *argv[]){
   if(argc < 2){
     printf("Usage: ./chip8 [rom_path]\n");
     exit(1);
   }
 
+  SDL_Window *window = NULL;
+  SDL_Event event;
+
   init_chip8();
+  init_SDL(argv[1], window);
+
   open_rom(argv[1]);
-  
+
   // Main emulation loop; we execute until the PC exceeds memory
   while(PC <= 0xFFF){
-    print_info();
+    // Poll for any events
+    // TODO: handle keyboard events
+    while(SDL_PollEvent(&event)){
+      if(event.type == SDL_QUIT){
+        PC =  0xFFF;
+        goto end;
+      }
+    }
+
     cycle();
+    print_info();
     sleep(1);
   }
 
-  printf("Program has finished execution.\n");
+  end:
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+
+    printf("Program has finished execution.\n");
+
   return 0;
 }
