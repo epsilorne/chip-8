@@ -31,6 +31,27 @@ void init_chip8(void){
 }
 
 /**
+ * Open a ROM and place it into the CHIP-8 memory. Takes
+ * the file path of the ROM.
+ */
+void open_rom(char* rom){
+  FILE *fptr;
+
+  if((fptr = fopen(rom, "rb")) == NULL){
+    perror("fopen");
+    exit(1);
+  }
+
+  // Get the size of the file
+  fseek(fptr, 0, SEEK_END);
+  size_t size = ftell(fptr);
+  fseek(fptr, 0, SEEK_SET);
+
+  // Store the file into memory
+  fread(memory + 0x200, sizeof(uint16_t), size, fptr);
+}
+
+/**
   * Simulate a single cycle. This involves fetching the current
   * instruction, decoding it and execution.
   */
@@ -271,13 +292,42 @@ void cycle(void){
 
         default:
           break;
-
       }
+
+    default:
+      printf("Error: Invalid OPCODE 0x%4x\n", opcode);
+      break;
   }
 }
 
+/**
+  * Displays the current state of the registers, stack, PC, etc.
+  */
+void print_info(){
+  printf("\r");
+  for(int i = 0; i < 16; i++){
+    printf("V%x: %u ", i, v[i]);
+  }
+  printf("| PC: %4x", PC);
+  fflush(stdout);
+}
+
 int main(int argc, char *argv[]){
-  init_chip8(); 
-  cycle();
+  if(argc < 2){
+    printf("Usage: ./chip8 [rom_path]\n");
+    exit(1);
+  }
+
+  init_chip8();
+  open_rom(argv[1]);
+  
+  // Main emulation loop; we execute until the PC exceeds memory
+  while(PC <= 0xFFF){
+    print_info();
+    cycle();
+    sleep(1);
+  }
+
+  printf("Program has finished execution.\n");
   return 0;
 }
