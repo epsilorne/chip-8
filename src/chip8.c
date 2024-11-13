@@ -8,6 +8,14 @@
 
 #include "chip8.h"
 
+/* SDL Components */
+SDL_Window *window = NULL;
+SDL_Renderer *renderer = NULL;
+SDL_Texture *canvas = NULL;
+
+// Representation of the CHIP-8 display - each element is 'on' or 'off'
+uint8_t display[CHIP8_HEIGHT][CHIP8_WIDTH];
+
 /**
   * Initialise memory and registers to their starting values.
   */
@@ -32,14 +40,14 @@ void init_chip8(void){
 }
 
 /**
- * Open a ROM and place it into the CHIP-8 memory. Takes the file path of the ROM.
+ * Open a ROM and place it into the CHIP-8 memory. Takes the file path of the ROM,
+ * and returns a pointer to the opened ROM.
  */
-void open_rom(char* rom){
+FILE *open_rom(char* rom){
   FILE *fptr;
 
   if((fptr = fopen(rom, "rb")) == NULL){
-    perror("fopen");
-    exit(1);
+    return NULL;
   }
 
   // Get the size of the file
@@ -49,7 +57,34 @@ void open_rom(char* rom){
 
   // Store the file into memory
   fread(memory + 0x200, sizeof(uint16_t), size, fptr);
+
+  return fptr;
 }
+
+/** Update the display. This should only be called after a DRW instruction.
+ */
+void refresh_display(void){
+  uint8_t *pixels;
+  int pitch;
+
+  if(SDL_LockTexture(canvas, NULL, (void**) &pixels, &pitch) != 0){
+    fprintf(stderr, "SDL_LockTexture: %s\n", SDL_GetError());
+  }
+
+  // Update SDL display to match display[][]
+  for(int y = 0; y < CHIP8_HEIGHT; y++){
+    for(int x = 0; x < CHIP8_WIDTH; x++){
+      pixels[y * pitch + x] = (display[y][x] != 0) ? 0xFF : 0x00;
+    }
+  }
+
+  SDL_UnlockTexture(canvas);
+
+  SDL_RenderClear(renderer);
+  SDL_RenderCopy(renderer, canvas, NULL, NULL);
+  SDL_RenderPresent(renderer);
+}
+
 
 /**
   * Simulate a single cycle. This involves fetching the current instruction,
@@ -68,7 +103,7 @@ void cycle(void){
   
   uint8_t x = (opcode & 0x0F00) >> 8;
   uint8_t y = (opcode & 0x00F0) >> 4;
-  
+
   // EXECUTE
   switch(opcode & 0xF000){
     // 0000 OPCODES
@@ -76,7 +111,7 @@ void cycle(void){
       switch(opcode & 0x00FF){
         // 00E0 - CLS
         case(0x00E0):
-          // TODO: clear display
+          memset(display, 0, sizeof(display));
           break;
 
         // 00EE - RET
@@ -88,6 +123,7 @@ void cycle(void){
         default:
           break;
       }
+      break;
 
     // 1nnn - JP addr
     case(0x1000):
@@ -191,6 +227,7 @@ void cycle(void){
         default:
           break;
       }
+      break;
 
     // 9xy0 - SNE Vx, Vy
     case(0x9000):
@@ -216,7 +253,32 @@ void cycle(void){
 
     // Dxyn - DRW Vx, Vy, nibble
     case(0xD000):
-      // TODO: Drawing
+      v[0xF] = 0;
+      uint8_t sprite_row;
+
+      // For each 'row' of the sprite...
+      for(uint16_t i = 0; i < n; i++){
+        sprite_row = memory[I + i];
+
+        // Go through each bit of the row and set the display bit
+        for(uint16_t j = 0, k = 1; j < 8; j++, k++){
+
+          // Obtain the corresponding display bit
+          uint8_t *display_bit = &display[(v[y] + i) % CHIP8_HEIGHT][(v[x] + (7 - j)) % CHIP8_WIDTH];
+
+          // The value to be 'drawn'
+          uint8_t value = (sprite_row & (1 << k));
+
+          // If a collision occurs, set V[F]
+          if(*display_bit & value){
+            v[0xF] = 1;
+          }
+
+          *display_bit = value;
+        }
+      }
+
+      refresh_display();
       break;
 
     // E000 OPCODES
@@ -235,6 +297,7 @@ void cycle(void){
         default:
           break;
       }
+      break;
 
     // F000 OPCODES
     case(0xF000):
@@ -293,6 +356,7 @@ void cycle(void){
         default:
           break;
       }
+      break;
 
     default:
       printf("Error: Invalid OPCODE 0x%4x\n", opcode);
@@ -316,18 +380,35 @@ void print_info(void){
   * Initialises SDL display. Takes a char* pointer for the window title (e.g.
   * name of the ROM loaded) and a SDL_Window.
   */
-void init_SDL(char* title, SDL_Window *window){
+void init_SDL(char* title){
   if(SDL_Init(SDL_INIT_VIDEO) != 0){
     fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
     exit(1);
   }
 
-  if((window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-  SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN)) == NULL){
-    fprintf(stderr,  "SDL_CreateWindow: %s\n", SDL_GetError());
+  if(SDL_CreateWindowAndRenderer(SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN,
+    &window, &renderer) < 0){
+    fprintf(stderr, "SDL_CreateWindowAndRenderer: %s\n", SDL_GetError());
     SDL_Quit();
     exit(1);
   }
+
+  if((canvas = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB332, SDL_TEXTUREACCESS_STREAMING, CHIP8_WIDTH, CHIP8_HEIGHT)) == NULL){
+    fprintf(stderr, "SDL_CreateTexture: %s\n", SDL_GetError());
+    SDL_Quit();
+    exit(1);
+  }
+
+  // Remove the file extension from title
+  char *dot = strchr(title, '.');
+  if(dot != NULL){
+    *dot = '\0';
+  }
+
+  SDL_SetWindowTitle(window, title);
+
+  SDL_SetRenderTarget(renderer, canvas);
+  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 }
 
 int main(int argc, char *argv[]){
@@ -336,13 +417,17 @@ int main(int argc, char *argv[]){
     exit(1);
   }
 
-  SDL_Window *window = NULL;
+  FILE *rom = NULL;
   SDL_Event event;
 
   init_chip8();
-  init_SDL(argv[1], window);
 
-  open_rom(argv[1]);
+  if((rom = open_rom(argv[1])) == NULL){
+    perror("open_rom");
+    exit(1);
+  }
+
+  init_SDL(argv[1]);
 
   // Main emulation loop; we execute until the PC exceeds memory
   while(PC <= 0xFFF){
@@ -357,14 +442,16 @@ int main(int argc, char *argv[]){
 
     cycle();
     print_info();
-    sleep(1);
   }
 
   end:
+    SDL_DestroyTexture(canvas);
+    SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
 
-    printf("Program has finished execution.\n");
+    printf("\nReached the end of the ROM - exiting emulator...\n");
+    fclose(rom);
 
   return 0;
 }
