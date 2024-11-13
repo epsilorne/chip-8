@@ -254,27 +254,27 @@ void cycle(void){
     // Dxyn - DRW Vx, Vy, nibble
     case(0xD000):
       v[0xF] = 0;
+
       uint8_t sprite_row;
+      uint8_t x_pos = v[x] % CHIP8_WIDTH;
+      uint8_t y_pos = v[y] % CHIP8_HEIGHT;
 
       // For each 'row' of the sprite...
-      for(uint16_t i = 0; i < n; i++){
+      for(uint16_t i = 0; i < n && y_pos + i < CHIP8_HEIGHT; i++){
         sprite_row = memory[I + i];
 
-        // Go through each bit of the row and set the display bit
-        for(uint16_t j = 0, k = 1; j < 8; j++, k++){
+        // Go through each of the 8 bits
+        for(uint16_t j = 0; j < 8 && x_pos + j < CHIP8_WIDTH; j++){
 
-          // Obtain the corresponding display bit
-          uint8_t *display_bit = &display[(v[y] + i) % CHIP8_HEIGHT][(v[x] + (7 - j)) % CHIP8_WIDTH];
+          // The position in the display we draw to
+          uint8_t *display_pos = &display[y_pos + i][x_pos + j];
 
           // The value to be 'drawn'
-          uint8_t value = (sprite_row & (1 << k));
+          uint8_t value = sprite_row & (1 << (7 - j));
 
-          // If a collision occurs, set V[F]
-          if(*display_bit & value){
+          if((*display_pos ^= value) != 0){
             v[0xF] = 1;
           }
-
-          *display_bit = value;
         }
       }
 
