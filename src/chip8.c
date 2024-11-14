@@ -171,6 +171,7 @@ void cycle(void){
     // 8000 OPCODES
     case(0x8000):
       switch(opcode & 0x000F){
+        uint8_t flag;
         // 8xy0 - LD Vx, Vy
         case(0x0000):
           v[x] = v[y];
@@ -194,34 +195,41 @@ void cycle(void){
         // 8xy4 - ADD Vx, Vy
         case(0x0004):
           uint16_t val = v[x] + v[y];
-          // Set v[f] = carry (if overflow occurs)
-          v[0xF] = val > 0xFF;
           v[x] = (uint8_t) val;
+
+          v[0xF] = val > 0xFF;
           break;
 
         // 8xy5 - SUB Vx, Vy
         case(0x0005):
-          // Set v[f] = NOT borrow (if negative result)
-          v[0xF] = v[x] > v[y];
+          flag = v[x] >= v[y];
           v[x] = v[x] - v[y];
+
+          v[0xF] = flag;
           break;
 
         // 8xy6 - SHR Vx {, Vy}
         case(0x0006):
-          v[0xF] = v[x] & 0x1;
+          flag = v[x] & 0x1;
           v[x] = v[x] >> 1;
+
+          v[0xF] = flag;
           break;
 
         // 8xy7 - SUBN Vx, Vy
         case(0x0007):
-          v[0xF] = v[y] > v[x];
+          flag = v[y] >= v[x];
           v[x] = v[y] - v[x];
+
+          v[0xF] = flag;
           break;
 
         // 8xyE - SHL Vx {, Vy}
         case(0x000E):
-          v[0xF] = v[x] >> 7;
+          flag = v[x] >> 7;
           v[x] = v[x] << 1;
+
+          v[0xF] = flag;
           break;
 
         default:
