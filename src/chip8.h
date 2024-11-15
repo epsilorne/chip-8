@@ -29,4 +29,7 @@ uint8_t sound_timer;
 uint16_t stack[16];
 uint8_t SP;
 
+/* Keys */
+uint8_t keys[16];
+
 #endif

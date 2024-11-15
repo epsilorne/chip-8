@@ -58,6 +58,9 @@ void init_chip8(void){
     0xF0, 0x80, 0xF0, 0x80, 0x80  // F
   };
   memcpy(memory, fonts, sizeof(fonts));
+
+  // Initially, all keys are OFF
+  memset(keys, 0, sizeof(keys));
 }
 
 /**
@@ -77,7 +80,7 @@ FILE *open_rom(char* rom){
   fseek(fptr, 0, SEEK_SET);
 
   // Store the file into memory
-  fread(memory + 0x200, sizeof(uint16_t), size, fptr);
+  fread(memory + 0x200, sizeof(uint8_t), size, fptr);
 
   return fptr;
 }
@@ -315,12 +318,16 @@ void cycle(void){
       switch(opcode & 0x00FF){
         // Ex9E - SKP Vx
         case(0x009E):
-          // TODO: Keyboard
+          if(keys[v[x]]){
+            PC += 2;
+          }
           break;
 
         // ExA1 - SKNP Vx
         case(0x00A1):
-          // TODO: Keyboard
+          if(!keys[v[x]]){
+            PC += 2;
+          }
           break;
 
         default:
@@ -338,7 +345,19 @@ void cycle(void){
 
         // Fx0A - LD Vx, K
         case(0x000A):
-          // TODO: Keyboard
+          // Decrement the PC so we can 'wait'
+          PC -= 2;
+
+          // Store the first recorded key if pressed
+          for(int i = 0; i < 16; i++){
+            if(keys[i] != 0){
+              v[x] = i;
+
+              // This allows us to move to the next instruction
+              PC += 2;
+              break;
+            }
+          }
           break;
 
         // Fx15 - LD DT, Vx
@@ -441,6 +460,48 @@ void init_SDL(char* title){
   SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 }
 
+/* Converts a key (character) into the equivalent CHIP-8 keyboard key. If the
+ * key is not within range, 0x10 is returned.
+ */
+uint16_t key_to_idx(char key){
+  switch(key){
+    case '1':
+      return 0x1;
+    case '2':
+      return 0x2;
+    case '3':
+      return 0x3;
+    case '4':
+      return 0xC;
+    case 'q':
+      return 0x4;
+    case 'w':
+      return 0x5;
+    case 'e':
+      return 0x6;
+    case 'r':
+      return 0xD;
+    case 'a':
+      return 0x7;
+    case 's':
+      return 0x8;
+    case 'd':
+      return 0x9;
+    case 'f':
+      return 0xE;
+    case 'z':
+      return 0xA;
+    case 'x':
+      return 0x0;
+    case 'c':
+      return 0xB;
+    case 'v':
+      return 0xF;
+    default:
+      return 0x10;
+  }
+}
+
 int main(int argc, char *argv[]){
   if(argc < 2){
     printf("Usage: ./chip8 [rom_path]\n");
@@ -449,6 +510,7 @@ int main(int argc, char *argv[]){
 
   FILE *rom = NULL;
   SDL_Event event;
+  uint16_t key_idx;
 
   init_chip8();
 
@@ -461,12 +523,23 @@ int main(int argc, char *argv[]){
 
   // Main emulation loop; we execute until the PC exceeds memory
   while(PC <= 0xFFF){
-    // Poll for any events
-    // TODO: handle keyboard events
     while(SDL_PollEvent(&event)){
-      if(event.type == SDL_QUIT){
-        PC =  0xFFF;
-        goto end;
+      switch(event.type){
+        // In the event of a key press, we record it in the keys[] array
+        case SDL_KEYDOWN:
+          if((key_idx = key_to_idx(event.key.keysym.sym)) <= 0xF){
+            keys[(uint8_t) key_idx] = 1;
+          }
+          break;
+        case SDL_KEYUP:
+          if((key_idx = key_to_idx(event.key.keysym.sym)) <= 0xF){
+            keys[(uint8_t) key_idx] = 0;
+          }
+          break;
+        case SDL_QUIT:
+          goto end;
+        default:
+          break;
       }
     }
 
