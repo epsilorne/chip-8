@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <math.h>
 #include <SDL2/SDL.h>
 
 #include "chip8.h"
@@ -16,10 +17,20 @@ SDL_Texture *canvas = NULL;
 // Representation of the CHIP-8 display - each element is 'on' or 'off'
 uint8_t display[CHIP8_HEIGHT][CHIP8_WIDTH];
 
+// CPU frequency in Hz
+uint8_t clock_freq;
+
+// Instructions per frame
+uint16_t ipf;
+
 /**
   * Initialise memory and registers to their starting values.
   */
-void init_chip8(void){
+void init_chip8(uint8_t freq){
+  clock_freq = freq;
+
+  // IPF is based on the CPU frequency, but has a min value of 1
+  ipf = freq / 60 > 1 ? freq / 60 : 1;
   opcode = 0;
   
   memset(memory, 0, sizeof(memory));
@@ -350,7 +361,7 @@ void cycle(void){
 
           // Store the first recorded key if pressed
           for(int i = 0; i < 16; i++){
-            if(keys[i] != 0){
+            if(keys[i]){
               v[x] = i;
 
               // This allows us to move to the next instruction
@@ -504,7 +515,7 @@ uint16_t key_to_idx(char key){
 
 int main(int argc, char *argv[]){
   if(argc < 2){
-    printf("Usage: ./chip8 [rom_path]\n");
+    printf("Usage: ./chip8 <rom_path> [clock_freq]\n");
     exit(1);
   }
 
@@ -512,7 +523,12 @@ int main(int argc, char *argv[]){
   SDL_Event event;
   uint16_t key_idx;
 
-  init_chip8();
+  uint16_t freq = 500;
+  if(argc == 3){
+    freq = (uint16_t) atoi(argv[2]);
+  }
+
+  init_chip8(freq);
 
   if((rom = open_rom(argv[1])) == NULL){
     perror("open_rom");
@@ -521,8 +537,15 @@ int main(int argc, char *argv[]){
 
   init_SDL(argv[1]);
 
+  uint32_t last_ticks = SDL_GetTicks();
+
   // Main emulation loop; we execute until the PC exceeds memory
   while(PC <= 0xFFF){
+    // Loop executes at 60Hz
+    if(SDL_GetTicks() - last_ticks < 1000 / 60){
+      continue;
+    }
+
     while(SDL_PollEvent(&event)){
       switch(event.type){
         // In the event of a key press, we record it in the keys[] array
@@ -543,7 +566,20 @@ int main(int argc, char *argv[]){
       }
     }
 
-    cycle();
+    // Execute IPF no. of instructions
+    for(int i = 0; i < ipf; i++){
+      cycle();
+    }
+
+    // Decrement delay/sound timer registers if non-zero
+    if(delay_timer > 0){
+      delay_timer--;
+    }
+    if(sound_timer > 0){
+      sound_timer--;
+    }
+
+    last_ticks = SDL_GetTicks();
     print_info();
   }
 

@@ -6,7 +6,7 @@ CFLAGS = -Wall -g
 
 PROGS = chip8
 OBJS = $(addsuffix .o, $(FILES))
-LDLIBS = -lSDL2
+LDLIBS = -lSDL2 -lm
 
 all: $(PROGS)
 
