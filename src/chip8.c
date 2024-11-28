@@ -23,6 +23,9 @@ uint8_t clock_freq;
 // Instructions per frame
 uint16_t ipf;
 
+// Value of keys from the previous frame so we can detect key releases
+uint16_t prev_keys;
+
 /**
   * Initialise memory and registers to their starting values.
   */
@@ -70,8 +73,7 @@ void init_chip8(uint8_t freq){
   };
   memcpy(memory, fonts, sizeof(fonts));
 
-  // Initially, all keys are OFF
-  memset(keys, 0, sizeof(keys));
+  keys = prev_keys = 0;
 }
 
 /**
@@ -329,14 +331,14 @@ void cycle(void){
       switch(opcode & 0x00FF){
         // Ex9E - SKP Vx
         case(0x009E):
-          if(keys[v[x]]){
+          if(keys & (1 << v[x])){
             PC += 2;
           }
           break;
 
         // ExA1 - SKNP Vx
         case(0x00A1):
-          if(!keys[v[x]]){
+          if(!(keys & (1 << v[x]))){
             PC += 2;
           }
           break;
@@ -361,7 +363,7 @@ void cycle(void){
 
           // Store the first recorded key if pressed
           for(int i = 0; i < 16; i++){
-            if(keys[i]){
+            if((prev_keys & (1 << i)) != (keys & (1 << i))){
               v[x] = i;
 
               // This allows us to move to the next instruction
@@ -369,6 +371,7 @@ void cycle(void){
               break;
             }
           }
+
           break;
 
         // Fx15 - LD DT, Vx
@@ -422,6 +425,8 @@ void cycle(void){
       printf("Error: Invalid OPCODE 0x%4x\n", opcode);
       break;
   }
+
+  prev_keys = keys;
 }
 
 /**
@@ -541,22 +546,20 @@ int main(int argc, char *argv[]){
 
   // Main emulation loop; we execute until the PC exceeds memory
   while(PC <= 0xFFF){
-    // Loop executes at 60Hz
-    if(SDL_GetTicks() - last_ticks < 1000 / 60){
-      continue;
-    }
-
+    // We continuously poll for inputs...
     while(SDL_PollEvent(&event)){
       switch(event.type){
-        // In the event of a key press, we record it in the keys[] array
+        // In the event of a key press, we record it in the keys map
         case SDL_KEYDOWN:
+          // Check if a valid key was pressed
           if((key_idx = key_to_idx(event.key.keysym.sym)) <= 0xF){
-            keys[(uint8_t) key_idx] = 1;
+            keys |= 1 << (uint8_t) key_idx;
           }
           break;
         case SDL_KEYUP:
+          // Check if a valid key was pressed
           if((key_idx = key_to_idx(event.key.keysym.sym)) <= 0xF){
-            keys[(uint8_t) key_idx] = 0;
+            keys &= ~(1 << (uint8_t) key_idx);
           }
           break;
         case SDL_QUIT:
@@ -564,6 +567,11 @@ int main(int argc, char *argv[]){
         default:
           break;
       }
+    }
+
+    // But actual 'cycles' happen at 60Hz
+    if(SDL_GetTicks() - last_ticks < 1000 / 60){
+      continue;
     }
 
     // Execute IPF no. of instructions
