@@ -361,9 +361,11 @@ void cycle(void){
           // Decrement the PC so we can 'wait'
           PC -= 2;
 
-          // Store the first recorded key if pressed
+          // Store the first recorded key to be released
           for(int i = 0; i < 16; i++){
-            if((prev_keys & (1 << i)) != (keys & (1 << i))){
+            // We check if the key in the previous frame was 1 (pressed) and
+            // 0 in the current frame (released)
+            if((prev_keys & (1 << i)) && !(keys & (1 << i))){
               v[x] = i;
 
               // This allows us to move to the next instruction
@@ -542,10 +544,12 @@ int main(int argc, char *argv[]){
 
   init_SDL(argv[1]);
 
-  uint32_t last_ticks = SDL_GetTicks();
+  uint32_t last_timer_ticks = SDL_GetTicks();
+  uint32_t last_cycle_ticks = SDL_GetTicks();
+  uint32_t ticks = 0;
 
-  // Main emulation loop; we execute until the PC exceeds memory
-  while(PC <= 0xFFF){
+  // Main emulation loop
+  while(1){
     // We continuously poll for inputs...
     while(SDL_PollEvent(&event)){
       switch(event.type){
@@ -569,26 +573,27 @@ int main(int argc, char *argv[]){
       }
     }
 
-    // But actual 'cycles' happen at 60Hz
-    if(SDL_GetTicks() - last_ticks < 1000 / 60){
-      continue;
-    }
+    ticks = SDL_GetTicks();
 
-    // Execute IPF no. of instructions
-    for(int i = 0; i < ipf; i++){
+    // Independently execute instructions at freq Hz
+    if(ticks - last_cycle_ticks >= 1000 / freq){
       cycle();
+      last_cycle_ticks = SDL_GetTicks();
     }
 
-    // Decrement delay/sound timer registers if non-zero
-    if(delay_timer > 0){
-      delay_timer--;
-    }
-    if(sound_timer > 0){
-      sound_timer--;
+    // Update delay/sound timers at 60Hz
+    if(ticks - last_timer_ticks >= 1000 / 60){
+      // Decrement delay/sound timer registers if non-zero
+      if(delay_timer > 0){
+        delay_timer--;
+      }
+      if(sound_timer > 0){
+        sound_timer--;
+      }
+      last_timer_ticks = SDL_GetTicks();
     }
 
-    last_ticks = SDL_GetTicks();
-    print_info();
+    // print_info();
   }
 
   end:
