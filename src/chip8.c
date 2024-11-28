@@ -14,14 +14,15 @@ SDL_Window *window = NULL;
 SDL_Renderer *renderer = NULL;
 SDL_Texture *canvas = NULL;
 
+// 3 bits for R, 3 bits for G, 2 bits for B
+uint8_t fg_colour = 0b10010010;
+uint8_t bg_colour = 0b01001001;
+
 // Representation of the CHIP-8 display - each element is 'on' or 'off'
 uint8_t display[CHIP8_HEIGHT][CHIP8_WIDTH];
 
 // CPU frequency in Hz
 uint8_t clock_freq;
-
-// Instructions per frame
-uint16_t ipf;
 
 // Value of keys from the previous frame so we can detect key releases
 uint16_t prev_keys;
@@ -32,8 +33,6 @@ uint16_t prev_keys;
 void init_chip8(uint8_t freq){
   clock_freq = freq;
 
-  // IPF is based on the CPU frequency, but has a min value of 1
-  ipf = freq / 60 > 1 ? freq / 60 : 1;
   opcode = 0;
   
   memset(memory, 0, sizeof(memory));
@@ -111,7 +110,7 @@ void refresh_display(void){
   // Update SDL display to match display[][]
   for(int y = 0; y < CHIP8_HEIGHT; y++){
     for(int x = 0; x < CHIP8_WIDTH; x++){
-      pixels[y * pitch + x] = (display[y][x] != 0) ? 0xFF : 0x00;
+      pixels[y * pitch + x] = (display[y][x] != 0) ? fg_colour : bg_colour;
     }
   }
 
@@ -473,9 +472,7 @@ void init_SDL(char* title){
   }
 
   SDL_SetWindowTitle(window, title);
-
   SDL_SetRenderTarget(renderer, canvas);
-  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 }
 
 /* Converts a key (character) into the equivalent CHIP-8 keyboard key. If the
