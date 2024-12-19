@@ -309,16 +309,20 @@ void cycle(void){
 
         // Go through each of the 8 bits
         for(uint16_t j = 0; j < 8 && x_pos + j < CHIP8_WIDTH; j++){
-
-          // The position in the display we draw to
-          uint8_t *display_pos = &display[y_pos + i][x_pos + j];
-
           // The value to be 'drawn'
           uint8_t value = sprite_row & (1 << (7 - j));
 
-          if((*display_pos ^= value) != 0){
+          // The 'values' in the display before and after drawing
+          uint8_t *display_before = &display[y_pos + i][x_pos + j];
+          uint8_t display_after = *display_before ^ value;
+
+          // Check if a collision occured (value was non-zero, and is now zero)
+          if(*display_before != 0 && (display_after != *display_before)){
             v[0xF] = 1;
           }
+
+          // Set the display to be the XORed result
+          *display_before = display_after;
         }
       }
 
@@ -393,7 +397,7 @@ void cycle(void){
         // Fx29 - LD F, Vx
         case(0x0029):
           // Sprites are 5 bytes in length
-          I = memory[5 * (0x00FF & v[x])];
+          I = 5 * (0x00FF & v[x]);
           break;
 
         // Fx33 - LD B, Vx
